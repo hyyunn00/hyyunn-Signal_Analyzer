@@ -42,19 +42,19 @@ runs on.
 
 ## Config file
 
-Start from the example files in `configs/`:
-
 - `configs/default_biomarkers.yaml` — lab-wide defaults per biomarker
   (detection/filter parameters). A per-brain config is deep-merged on top of
   this; anything the brain config doesn't override falls back here. Merging
   only fills in fields for biomarkers your brain config already lists —
   listing one biomarker never pulls in any other biomarker this file happens
   to define, even if it defines several.
-- `configs/example_brain.yaml` — a full per-brain config (two biomarkers +
-  colocalization), annotated.
-- `configs/example_brain_single_marker.yaml` — the same, but for a single
-  biomarker with no colocalization section. **A single biomarker is fully
-  supported** — nothing in this pipeline requires two.
+- `configs/examples/` — six complete, independently loadable example configs
+  covering every combination the schema supports (registered vs.
+  non-registered brain, one vs. several biomarkers, with/without a real
+  hemisphere segmentation, colocalization with or without registration, and
+  a config loaded with no `--defaults` at all). See
+  [`configs/examples/README.md`](configs/examples/README.md) for the full
+  scenario table and what each one demonstrates.
 
 Minimal example for a **type B** (non-registered) brain:
 
@@ -77,7 +77,7 @@ paths:
 ```
 
 For a **type A** (registered) brain, add a `registration` section
-(see `configs/example_brain.yaml` for the full annotated version):
+(see `configs/examples/01_type_a_full_featured.yaml` for the full annotated version):
 
 ```yaml
 registration:
@@ -102,7 +102,7 @@ Config validation enforces: `needs_registration: true` requires a
 ## Run it
 
 ```bash
-signal-analyzer configs/example_brain.yaml --defaults configs/default_biomarkers.yaml
+signal-analyzer configs/examples/01_type_a_full_featured.yaml --defaults configs/default_biomarkers.yaml
 ```
 
 Options:
@@ -141,7 +141,7 @@ takes effect without redoing detection.
 from signal_analyzer.common.config import load_config
 from signal_analyzer.pipelines import run_pipeline
 
-config = load_config("configs/example_brain.yaml", defaults_path="configs/default_biomarkers.yaml")
+config = load_config("configs/examples/01_type_a_full_featured.yaml", defaults_path="configs/default_biomarkers.yaml")
 results = run_pipeline(config, roi_acronyms=["HIP", "STR"])
 ```
 

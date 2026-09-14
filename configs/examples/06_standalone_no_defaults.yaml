@@ -1,0 +1,38 @@
+# SCENARIO: a config that is loaded WITHOUT a --defaults/defaults_path file
+# at all -- every `detection`/`filter` field is given inline instead of
+# relying on a deep-merge against configs/default_biomarkers.yaml.
+#
+# Every other example in this directory assumes it's loaded together with
+# `--defaults configs/default_biomarkers.yaml`. That's convenient for a lab
+# with many brains sharing biomarker defaults, but nothing about the schema
+# REQUIRES it -- a single self-contained file works too. Uses a type-B brain
+# here just to keep the example short; the same "no defaults_path" approach
+# works identically for a type-A config.
+#
+# Load with (note: no defaults_path argument at all):
+#   signal_analyzer.common.config.load_config(
+#       "configs/examples/06_standalone_no_defaults.yaml")
+#   # or: signal-analyzer configs/examples/06_standalone_no_defaults.yaml   (no --defaults flag)
+#
+# Compare against:
+#   04_type_b_single_marker.yaml -- same brain type/shape, but relies on --defaults
+#                                    for detection params (connectivity/z_chunk)
+
+brain:
+  id: "standalone-brain-01"
+  voxel_size_um: [4.0, 1.82, 1.82]   # native (Z,Y,X), per-brain
+  needs_registration: false
+
+biomarkers:
+  cFos:
+    mask_path: "/path/to/standalone-brain-01/cFos_mask.tif"
+    detection:
+      connectivity: 18
+      z_chunk: 100
+    filter:
+      min_volume_voxels: 25
+      max_volume_voxels: 10000
+
+paths:
+  structures_csv: "data/structures.csv"
+  output_dir: "/path/to/standalone-brain-01/output"

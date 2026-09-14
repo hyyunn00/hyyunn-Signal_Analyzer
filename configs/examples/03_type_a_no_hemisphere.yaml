@@ -1,0 +1,39 @@
+# SCENARIO: registered brain ("type A") with NO hemisphere_path given at all.
+#
+# `registration.hemisphere_path` is optional. When it's omitted (as here),
+# region/asymmetry statistics fall back to a plain X-axis midline split
+# directly on the annotation volume (report/region_stats.py -- this is
+# MARS's own original convention, ported verbatim as the no-hemisphere-file
+# fallback). Pass a real hemisphere_path (see 01_type_a_full_featured.yaml)
+# whenever an actual hemisphere segmentation is available -- it's more
+# accurate than a straight midline cut, especially for asymmetric brains.
+#
+# Load with:
+#   signal_analyzer.common.config.load_config(
+#       "configs/examples/03_type_a_no_hemisphere.yaml",
+#       defaults_path="configs/default_biomarkers.yaml")
+#
+# Compare against:
+#   01_type_a_full_featured.yaml -- same shape, but WITH a real hemisphere_path
+
+brain:
+  id: "no-hemisphere-brain-01"
+  voxel_size_um: [4.0, 1.82, 1.82]   # native (Z,Y,X), per-brain
+  needs_registration: true
+
+biomarkers:
+  cFos:
+    mask_path: "/path/to/no-hemisphere-brain-01/cFos_mask.tif"
+    filter:
+      min_volume_voxels: 25
+      max_volume_voxels: 10000
+
+registration:
+  annotation_path: "/path/to/no-hemisphere-brain-01/annotation.tif"   # BIRDS output
+  # hemisphere_path: intentionally omitted -- triggers the X-midline fallback
+  downsample_factor: [2, 5, 5]        # per-axis (Z,Y,X)
+  transpose_order: [1, 0, 2]          # BIRDS Y/Z-swap convention; must be self-inverse
+
+paths:
+  structures_csv: "data/structures.csv"
+  output_dir: "/path/to/no-hemisphere-brain-01/output"

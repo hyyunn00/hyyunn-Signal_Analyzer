@@ -1,0 +1,44 @@
+# SCENARIO: a NON-registered brain ("type B") with TWO biomarkers and a
+# colocalization pair.
+#
+# Colocalization is NOT tied to registration status at all -- it's a direct
+# point-in-mask test between two biomarkers' own detected/original data
+# (colocalization.coloc.colocalize_pair), which never touches annotation.tif
+# or region ids. config validation only checks that the pair's biomarker
+# names exist under `biomarkers:`, so this is a legal (if less common)
+# combination. As with every other config, running the colocalization step
+# itself is still a manual Python-API call, not something the CLI/
+# orchestrators trigger automatically (see README's Colocalization section).
+#
+# Load with:
+#   signal_analyzer.common.config.load_config(
+#       "configs/examples/05_type_b_with_colocalization.yaml",
+#       defaults_path="configs/default_biomarkers.yaml")
+#
+# Compare against:
+#   01_type_a_full_featured.yaml    -- colocalization on a registered brain instead
+#   04_type_b_single_marker.yaml    -- same brain type, but only one biomarker (no colocalization)
+
+brain:
+  id: "type-b-coloc-brain-01"
+  voxel_size_um: [4.0, 1.82, 1.82]   # native (Z,Y,X), per-brain
+  needs_registration: false
+
+biomarkers:
+  cFos:
+    mask_path: "/path/to/type-b-coloc-brain-01/cFos_mask.tif"
+  TH:
+    mask_path: "/path/to/type-b-coloc-brain-01/TH_mask.tif"
+    filter:
+      min_volume_voxels: 10
+      max_volume_voxels: 5000
+
+# No `registration:` section -- forbidden for needs_registration: false.
+
+colocalization:
+  pairs:
+    - {larger: "TH", smaller: "cFos"}
+
+paths:
+  structures_csv: "data/structures.csv"
+  output_dir: "/path/to/type-b-coloc-brain-01/output"

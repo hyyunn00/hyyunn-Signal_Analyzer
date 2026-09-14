@@ -1,0 +1,48 @@
+# SCENARIO: registered brain ("type A"), TWO biomarkers, a real hemisphere
+# segmentation file, and a colocalization pair -- the most fully-featured
+# config shape this schema supports.
+#
+# Load with:
+#   signal_analyzer.common.config.load_config(
+#       "configs/examples/01_type_a_full_featured.yaml",
+#       defaults_path="configs/default_biomarkers.yaml")
+#   # or: signal-analyzer configs/examples/01_type_a_full_featured.yaml --defaults configs/default_biomarkers.yaml
+#
+# Compare against:
+#   02_type_a_single_marker.yaml   -- same brain type, but only one biomarker
+#   03_type_a_no_hemisphere.yaml   -- same brain type, but no hemisphere_path
+#   06_standalone_no_defaults.yaml -- same idea, without relying on --defaults at all
+
+brain:
+  id: "example-brain-01"
+  voxel_size_um: [4.0, 1.82, 1.82]   # native (Z,Y,X), per-brain
+  needs_registration: true
+
+biomarkers:
+  cFos:
+    mask_path: "/path/to/example-brain-01/cFos_mask.tif"
+    # detection/filter omitted here -> inherited from default_biomarkers.yaml
+  TH:
+    mask_path: "/path/to/example-brain-01/TH_mask.tif"
+    filter:
+      min_volume_voxels: 15   # override just this one field; connectivity/z_chunk/max still inherited
+
+registration:
+  annotation_path: "/path/to/example-brain-01/annotation.tif"   # BIRDS output
+  hemisphere_path: "/path/to/example-brain-01/hemisphere.tif"    # a real hemisphere segmentation --
+                                                                  # omit this field entirely to fall back
+                                                                  # to an X-midline split (see 03_type_a_no_hemisphere.yaml)
+  downsample_factor: [2, 5, 5]        # per-axis (Z,Y,X); this lab's typical value -- confirmed with
+                                       # the user as Z=2, X=5, Y=5 (matches MARS's SCALE_X,SCALE_Y,SCALE_Z=5,5,2
+                                       # reordered into this config's (Z,Y,X) convention). Used only by
+                                       # align.convert's forward pass.
+  transpose_order: [1, 0, 2]          # BIRDS Y/Z-swap convention; must be self-inverse (see common.config)
+
+colocalization:
+  pairs:
+    - {larger: "TH", smaller: "cFos"}   # cFos cell centroids tested against TH's original mask;
+                                         # still a manual/Python-API step, not run by the CLI (see README)
+
+paths:
+  structures_csv: "data/structures.csv"
+  output_dir: "/path/to/example-brain-01/output"

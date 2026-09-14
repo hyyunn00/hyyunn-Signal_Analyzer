@@ -1,0 +1,37 @@
+# SCENARIO: a NON-registered brain ("type B"), one biomarker -- the simplest
+# possible valid config.
+#
+# `needs_registration: false` means this brain has NO annotation.tif at all
+# (not "an annotation that happens to be native-space") -- config loading
+# REJECTS a `registration:` section here outright (see common/config.py).
+# Consequently there is no region/hemisphere breakdown for this brain: only
+# a whole-brain total filtered-cell count per biomarker is produced
+# (`<biomarker>_whole_brain_report.csv`), and `--roi`/`--functional-system`
+# are silently ignored for it.
+#
+# Load with:
+#   signal_analyzer.common.config.load_config(
+#       "configs/examples/04_type_b_single_marker.yaml",
+#       defaults_path="configs/default_biomarkers.yaml")
+#
+# Compare against:
+#   02_type_a_single_marker.yaml       -- same single-marker idea, but registered
+#   05_type_b_with_colocalization.yaml -- same brain type, but two biomarkers + colocalization
+
+brain:
+  id: "type-b-brain-01"
+  voxel_size_um: [4.0, 1.82, 1.82]   # native (Z,Y,X), per-brain
+  needs_registration: false
+
+biomarkers:
+  cFos:
+    mask_path: "/path/to/type-b-brain-01/cFos_mask.tif"
+    filter:
+      min_volume_voxels: 25
+      max_volume_voxels: 10000
+
+# No `registration:` section -- forbidden for needs_registration: false.
+
+paths:
+  structures_csv: "data/structures.csv"
+  output_dir: "/path/to/type-b-brain-01/output"

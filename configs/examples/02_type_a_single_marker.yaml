@@ -1,16 +1,18 @@
-# Example per-brain run config for a SINGLE biomarker -- confirms this
+# SCENARIO: registered brain ("type A"), a SINGLE biomarker -- confirms this
 # pipeline works fine with just one marker: no colocalization section is
 # required, and nothing else needs two entries under `biomarkers:`.
 # (Also proven directly by tests/test_run_with_registration.py and
 # tests/test_run_without_registration.py, which both deliberately configure
 # only one biomarker.)
 #
-# Load with: signal_analyzer.common.config.load_config(
-#   "configs/example_brain_single_marker.yaml", defaults_path="configs/default_biomarkers.yaml")
+# Load with:
+#   signal_analyzer.common.config.load_config(
+#       "configs/examples/02_type_a_single_marker.yaml",
+#       defaults_path="configs/default_biomarkers.yaml")
 #
-# This example is a REGISTERED brain (type A). For a brain that does NOT
-# need registration (type B), omit the entire `registration:` section and
-# set `needs_registration: false` -- see configs/example_brain.yaml.
+# Compare against:
+#   01_type_a_full_featured.yaml -- same brain type, but two biomarkers + colocalization
+#   04_type_b_single_marker.yaml -- same single-marker idea, but for a NON-registered brain
 
 brain:
   id: "single-marker-brain-01"
@@ -28,6 +30,7 @@ registration:
   annotation_path: "/path/to/single-marker-brain-01/annotation.tif"   # BIRDS output
   downsample_factor: [2, 5, 5]        # per-axis (Z,Y,X); this lab's typical value (Z=2, X=5, Y=5)
   transpose_order: [1, 0, 2]          # BIRDS Y/Z-swap convention; must be self-inverse (see common.config)
+  # hemisphere_path omitted here too -- see 03_type_a_no_hemisphere.yaml for that fallback explained
 
 # No `colocalization:` section -- it's entirely optional and irrelevant
 # with only one biomarker configured.

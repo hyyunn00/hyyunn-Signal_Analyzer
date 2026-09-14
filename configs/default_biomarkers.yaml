@@ -1,5 +1,5 @@
-# Lab-wide default biomarker parameters. A per-brain config (e.g.
-# example_brain.yaml) is deep-merged on top of this file (see
+# Lab-wide default biomarker parameters. A per-brain config (e.g. any file
+# under configs/examples/) is deep-merged on top of this file (see
 # common.config.load_config's `defaults_path` argument) -- values in the
 # per-brain config always win; anything it omits falls back to here.
 #
