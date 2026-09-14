@@ -35,6 +35,7 @@ computation term for term.
 """
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 from typing import Optional
 
@@ -45,6 +46,7 @@ import pyarrow.parquet as pq
 
 from ..common.cell_schema import CELL_SCHEMA
 from ..io import FileReader, FileWriter
+from ..io.convert import convert_zarr_to_format
 
 
 def invert_transpose_order(transpose_order: tuple[int, int, int]) -> tuple[int, int, int]:
@@ -199,6 +201,7 @@ def resample_atlas_volume_to_native(
     resize_order: int = 0,
     chunk_size: tuple[int, int, int] = (128, 128, 128),
     n_workers: int = 8,
+    output_type: str = "single-tiff",
 ) -> Path:
     """Resample an atlas-space volume back to native mask resolution/orientation.
 
@@ -226,12 +229,19 @@ def resample_atlas_volume_to_native(
     forward/inverse direction can never silently diverge again).
     ``resize_order=0`` (nearest-neighbor) by default, since atlas volumes
     are integer region/label ids that must not be interpolated.
+
+    Args:
+        output_type: Final output format (default ``'single-tiff'``, so the
+            result is directly openable in Fiji at the same dimensions as
+            the original native image). See ``resize_atlas_array_to_native``
+            for how non-Zarr formats are produced.
     """
     reader = FileReader(atlas_path, transpose_order=transpose_order)
     data = reader.read()
     return resize_atlas_array_to_native(
         data, native_shape, output_path, output_name,
         resize_order=resize_order, chunk_size=chunk_size, n_workers=n_workers,
+        output_type=output_type,
     )
 
 
@@ -243,6 +253,7 @@ def resize_atlas_array_to_native(
     resize_order: int = 0,
     chunk_size: tuple[int, int, int] = (128, 128, 128),
     n_workers: int = 8,
+    output_type: str = "single-tiff",
 ) -> Path:
     """Upsample an already-logical-order atlas-space array to native resolution.
 
@@ -254,10 +265,22 @@ def resize_atlas_array_to_native(
     ``resample_atlas_volume_to_native`` (which additionally handles reading
     a raw on-disk file first) -- use this one directly when the logical-order
     array is already in memory.
+
+    Args:
+        output_type: Final output format. ``io.FileWriter``'s two-pass resize
+            pipeline only supports ``'zarr'``/``'ome-zarr'`` targets, so for
+            any other ``output_type`` (default ``'single-tiff'``) this
+            resizes into a temporary intermediate Zarr store first, converts
+            it to the requested format via ``io.convert_zarr_to_format``,
+            then deletes the intermediate store.
     """
+    zarr_needed = output_type not in ("zarr", "ome-zarr")
+    zarr_output_path = Path(output_path) / f"_tmp_resize_{output_name}" if zarr_needed else output_path
+    zarr_output_name = output_name
+
     writer = FileWriter(
-        output_path=output_path,
-        output_name=output_name,
+        output_path=zarr_output_path,
+        output_name=zarr_output_name,
         output_type="zarr",
         full_res_shape=native_shape,
         input_shape=atlas_array.shape,
@@ -268,4 +291,13 @@ def resize_atlas_array_to_native(
     )
     writer.write(atlas_array)
     writer.complete_resize()
-    return writer.output_path
+    zarr_path = writer.output_path
+
+    if not zarr_needed:
+        return zarr_path
+
+    final_path = convert_zarr_to_format(
+        zarr_path, output_path, output_name, output_type, chunk_size=chunk_size,
+    )
+    shutil.rmtree(zarr_path.parent, ignore_errors=True)
+    return final_path

@@ -52,6 +52,10 @@ def _write_structures_csv(tmp_path):
 
 
 def _make_config(mask_path, annotation_path, structures_csv, output_dir) -> RunConfig:
+    # Deliberately just ONE biomarker, no colocalization section -- this
+    # doubles as proof the pipeline works fine for single-marker runs (the
+    # user flagged this as a requirement); nothing here or in
+    # run_with_registration requires a second biomarker or colocalization.
     return RunConfig(
         brain=BrainConfig(id="PipelineTestA", voxel_size_um=(4.0, 1.82, 1.82), needs_registration=True),
         biomarkers={

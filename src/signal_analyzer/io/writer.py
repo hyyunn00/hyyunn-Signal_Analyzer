@@ -81,6 +81,15 @@ class FileWriter:
         self.resize_factor = int(resize_factor)
         self.n_level = int(n_level)
 
+        # For 'single-tiff'/'single-nii', the actual written filename embeds
+        # the z-range of the write() call (only known at write time, unlike
+        # every other output_type where the final path is fixed at init) --
+        # _write_single_tiff/_write_single_nii populate this so callers have
+        # a reliable path to the file that was actually written, instead of
+        # self.output_path (which stays the containing directory for these
+        # two types).
+        self.last_written_path: Path | None = None
+
         self.n_workers = int(n_workers)
         logger.info(f"Initialized FileWriter with output: {self.output_path}")
 
@@ -245,22 +254,66 @@ class FileWriter:
             ),
         )
 
+    def _single_output_name(self, z0: int, z1: int, suffix: str) -> str:
+        """Filename for a 'single' (non-scroll) output covering z0:z1.
+
+        A z0:z1 range covering the whole volume -- the common case, e.g.
+        roi_extract's one-shot resize->convert write -- gets a clean name
+        with no z-range suffix (matching MARS's own aba2roi.py convention,
+        e.g. ``{acronym}_atlas.tif``). A genuine partial write (multiple
+        write() calls, each covering a sub-range) still gets its z-range
+        embedded, since otherwise those files would collide.
+        """
+        if z0 == 0 and z1 == self.full_res_shape[0]:
+            return f"{self.output_name}{suffix}"
+        return f"{self.output_name}_z{z0}-{z1}{suffix}"
+
     def _write_single_tiff(self, array: np.ndarray, z0: int, z1: int, *_: int) -> None:
         """Persist the supplied block as a multi-page TIFF file."""
-        output_path = self.output_path / f"{self.output_name}_z{z0}-{z1}.tiff"
-        tifffile.imwrite(output_path, array.astype(self.output_dtype), imagej=True)
+        output_path = self.output_path / self._single_output_name(z0, z1, ".tiff")
+        tifffile.imwrite(output_path, array.astype(self.output_dtype), **self._tiff_write_kwargs())
+        self.last_written_path = output_path
 
     def _write_scroll_tiff(self, array: np.ndarray, z0: int, z1: int, *_: int) -> None:
         """Write per-slice TIFF files for scroll outputs."""
+        kwargs = self._tiff_write_kwargs()
         for idx, file_path in enumerate(self.output_file_path[z0:z1]):
-            tifffile.imwrite(file_path, array[idx].astype(self.output_dtype), imagej=True)
+            tifffile.imwrite(file_path, array[idx].astype(self.output_dtype), **kwargs)
+
+    def _imagej_safe(self) -> bool:
+        """Whether ``self.output_dtype`` is safe to write with ``imagej=True``.
+
+        ImageJ-compatible TIFFs only support bool/uint8/uint16/float32 sample
+        types. Label/region-id data (e.g. roi_extract's uint32 Allen CCF ids,
+        which can exceed 65535) must be written as a plain multi-page TIFF
+        instead -- still directly openable in Fiji as an image stack, just
+        without the ImageJ hyperstack metadata tag, which tifffile would
+        otherwise reject or write incorrectly for an unsupported dtype.
+        """
+        return self.output_dtype in (np.dtype(np.bool_), np.dtype(np.uint8), np.dtype(np.uint16), np.dtype(np.float32))
+
+    def _tiff_write_kwargs(self) -> dict:
+        """tifffile.imwrite kwargs for the current output_dtype.
+
+        For imagej-safe dtypes, ``imagej=True`` gives Fiji its hyperstack
+        metadata. Otherwise (e.g. uint32 label/region-id data), explicitly
+        pass ``photometric='minisblack'`` -- without it, tifffile's shape/
+        dtype-based guessing can misinterpret a plain (Z,Y,X) grayscale
+        label volume as RGB-with-separate-planes (observed for uint32
+        arrays), which would silently corrupt how the file is interpreted
+        by Fiji or any other reader, even though the file writes without error.
+        """
+        if self._imagej_safe():
+            return {"imagej": True}
+        return {"photometric": "minisblack"}
 
     def _write_single_nii(self, array: np.ndarray, z0: int, z1: int, *_: int) -> None:
         """Persist a full NIfTI volume covering the requested range."""
         arr_xyz = self._volume_to_nii_axes(array).astype(self.output_dtype)
         nii_img = nib.Nifti1Image(arr_xyz, affine=np.eye(4))
-        output_path = self.output_path / f"{self.output_name}_z{z0}-{z1}.nii.gz"
+        output_path = self.output_path / self._single_output_name(z0, z1, ".nii.gz")
         nib.save(nii_img, output_path)
+        self.last_written_path = output_path
 
     def _write_scroll_nii(self, array: np.ndarray, z0: int, z1: int, *_: int) -> None:
         """Write individual NIfTI files for scroll-style outputs."""

@@ -123,6 +123,32 @@ def _deep_merge(base: dict, override: dict) -> dict:
     return merged
 
 
+def _merge_config(defaults: dict, override: dict) -> dict:
+    """Merge a lab-wide defaults dict under a per-brain config dict.
+
+    Like ``_deep_merge``, except ``biomarkers`` is handled specially: only
+    biomarker names actually present in ``override["biomarkers"]`` are kept
+    in the result (each one's fields still deep-merged against the matching
+    default entry, if any). A plain ``_deep_merge`` would instead union the
+    two dicts' keys, silently pulling in every OTHER biomarker
+    ``defaults`` happens to define even when the per-brain config only
+    lists one -- confirmed with the user that a config naming exactly one
+    biomarker must produce a run with exactly that one, regardless of how
+    many the shared defaults file defines.
+    """
+    merged = _deep_merge(defaults, override)
+
+    override_biomarkers = override.get("biomarkers")
+    if isinstance(override_biomarkers, dict):
+        merged["biomarkers"] = {
+            name: merged["biomarkers"][name]
+            for name in override_biomarkers
+            if name in merged.get("biomarkers", {})
+        }
+
+    return merged
+
+
 def load_raw_yaml(path: str | Path) -> dict:
     """Load a YAML file into a plain dict, without validation."""
     path = Path(path)
@@ -150,7 +176,7 @@ def load_config(brain_config_path: str | Path, defaults_path: str | Path | None 
 
     if defaults_path is not None:
         defaults = load_raw_yaml(defaults_path)
-        raw = _deep_merge(defaults, raw)
+        raw = _merge_config(defaults, raw)
 
     return _build_run_config(raw, source_path=brain_config_path)
 

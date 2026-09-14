@@ -2,19 +2,21 @@
 
 Two output modes, matching what MARS's x2xz.py actually does today:
   - ``redraw_native_mask``: native-space, no transform -- useful for QC
-    against the original mask. Unlike MARS's x2xz.py (which writes one 2D
-    TIFF per Y-layer via PIL + multiprocessing, applying a redundant
-    hardcoded SCALE_X/Y/Z division), this writes a single chunked Zarr
-    volume via ``io.FileWriter`` -- no second downsample step, since these
-    cell coordinates are already native-resolution voxel coordinates
-    (detection never downsamples; see the architecture plan's confirmed
-    facts).
+    against the original mask, and for overlaying on it directly. Default
+    output is ``scroll-tiff`` (one TIFF per Z-slice, at the original image's
+    dimensions), so it opens in Fiji as an image sequence next to the raw
+    data. Unlike MARS's x2xz.py (which writes one 2D TIFF per Y-layer via
+    PIL + multiprocessing, applying a redundant hardcoded SCALE_X/Y/Z
+    division), no second downsample step is needed here, since these cell
+    coordinates are already native-resolution voxel coordinates (detection
+    never downsamples; see the architecture plan's confirmed facts).
   - ``redraw_atlas_mask``: atlas-space (what x2xz.py actually produces) --
     converts each coordinate through ``regions.coord_transform.
     native_to_atlas_points`` before scattering, reproducing x2xz.py's
     downsample-and-reslice-into-annotation-space behavior via the same
     shared, tested coordinate-mapping utility used everywhere else in this
-    codebase, instead of x2xz.py's standalone hardcoded SCALE_X/Y/Z.
+    codebase, instead of x2xz.py's standalone hardcoded SCALE_X/Y/Z. Stays
+    Zarr-only (not needed as TIFF per the user).
 
 Both are written in Z-slabs (not one big in-memory array), to stay
 memory-bounded for full-size brain volumes.
@@ -43,18 +45,31 @@ def _scatter_points_chunked(
     dtype,
     fill_value: int,
     chunk_size: tuple[int, int, int],
+    output_type: str = "zarr",
 ) -> Path:
     """Shared Z-chunked scatter-write used by both redraw modes.
 
     ``points`` must already be filtered to in-bounds (z,y,x) columns in the
     target ``shape``'s coordinate space.
+
+    ``output_type='scroll-tiff'`` writes one TIFF per Z-slice (a folder of
+    individually-named slices, directly openable in Fiji as an image
+    sequence and overlaid on the original raw image, which shares the same
+    per-slice structure at ``shape``'s dimensions); the write loop is
+    otherwise unchanged since ``FileWriter``'s scroll-tiff handler already
+    writes one file per Z-index within each chunk.
     """
+    file_name = None
+    if output_type == "scroll-tiff":
+        file_name = [Path(f"slice_{i:05d}") for i in range(shape[0])]
+
     writer = FileWriter(
         output_path=output_path,
         output_name=output_name,
-        output_type="zarr",
+        output_type=output_type,
         full_res_shape=shape,
         output_dtype=dtype,
+        file_name=file_name,
         chunk_size=chunk_size,
     )
 
@@ -99,27 +114,34 @@ def redraw_native_mask(
     dtype=np.uint8,
     fill_value: int = 255,
     chunk_size: tuple[int, int, int] = (128, 128, 128),
+    output_type: str = "scroll-tiff",
 ) -> Path:
     """Scatter passed-filter cell positions into a native-resolution mask volume.
 
     Args:
         cells_path: Path to the cell Parquet table.
         native_shape: (Z,Y,X) shape of the original mask this redraw should match.
-        output_path: Directory to write the output Zarr store into.
-        output_name: Base name for the output Zarr store.
+        output_path: Directory to write the output into.
+        output_name: Base name for the output.
         biomarker: If given, only redraw this biomarker's cells.
         dtype: Output voxel dtype.
         fill_value: Value written at each cell's voxel.
-        chunk_size: Zarr chunking for the output; also the Z-slab size used
-            while scattering, so memory use stays bounded regardless of
-            ``native_shape``.
+        chunk_size: Chunking for the output; also the Z-slab size used while
+            scattering, so memory use stays bounded regardless of ``native_shape``.
+        output_type: Output format, default ``'scroll-tiff'`` -- a folder of
+            per-Z-slice TIFFs at the same dimensions as the original raw
+            image, so it can be opened as an image sequence and overlaid on
+            the original directly in Fiji.
 
     Returns:
-        Path to the written Zarr store.
+        Path to the written output (a ``.scroll-tif`` folder for the default
+        ``output_type`).
     """
     df = read_cells(cells_path, biomarker=biomarker, passed_filter=True, columns=["z", "y", "x"])
     df = _drop_out_of_bounds(df, native_shape, "redraw_native_mask")
-    return _scatter_points_chunked(df, native_shape, output_path, output_name, dtype, fill_value, chunk_size)
+    return _scatter_points_chunked(
+        df, native_shape, output_path, output_name, dtype, fill_value, chunk_size, output_type=output_type,
+    )
 
 
 def redraw_atlas_mask(

@@ -65,7 +65,10 @@ def test_single_tiff_roundtrip(tmp_path):
     )
     writer.write(volume, z_start=0, z_end=3)
 
-    tiff_path = tmp_path / "test_tiff_z0-3.tiff"
+    # A full-volume write gets a clean filename (no z-range suffix), matching
+    # MARS's own aba2roi.py convention -- only a genuine partial write (a
+    # sub-range of full_res_shape) would embed a z-range to avoid collisions.
+    tiff_path = tmp_path / "test_tiff.tiff"
     assert tiff_path.exists()
 
     reader = FileReader(tiff_path)
@@ -118,7 +121,7 @@ def test_transpose_order_swaps_axes_on_read_tiff(tmp_path):
         output_dtype=volume.dtype,
     )
     writer.write(volume, z_start=0, z_end=2)
-    tiff_path = tmp_path / "transpose_tiff_z0-2.tiff"
+    tiff_path = tmp_path / "transpose_tiff.tiff"  # full-volume write -> clean filename
 
     reader = FileReader(tiff_path, transpose_order=(1, 0, 2))
     assert reader.volume_shape == (4, 2, 6)

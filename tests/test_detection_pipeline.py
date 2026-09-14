@@ -91,15 +91,18 @@ def test_full_brain_type_b_pipeline(tmp_path):
     assert report_path.exists()
     assert written.equals(report)
 
-    # --- redraw (native space) ---
-    redraw_native_mask(
+    # --- redraw (native space, default scroll-tiff so it's directly
+    # openable in Fiji next to the original raw image) ---
+    redraw_path = redraw_native_mask(
         cells_path,
         native_shape=NATIVE_SHAPE,
         output_path=tmp_path,
         output_name="redrawn_mask",
         chunk_size=(5, 20, 20),
     )
-    redrawn = FileReader(tmp_path / "redrawn_mask.zarr").read()
+    assert redraw_path.is_dir()
+    assert len(list(redraw_path.glob("*.tiff"))) == NATIVE_SHAPE[0]
+    redrawn = FileReader(redraw_path).read()
     assert redrawn.shape == NATIVE_SHAPE
 
     nonzero = np.argwhere(redrawn > 0)

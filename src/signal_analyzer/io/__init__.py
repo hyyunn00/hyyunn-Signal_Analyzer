@@ -6,6 +6,7 @@ Ported from Chulab-Signal_Analyzer's IO/__init__.py
 ``read_image`` from ``io.reader_tools`` for direct, single-file metadata/array
 opening.
 """
+from .convert import convert_zarr_to_format
 from .reader import FileReader
 from .reader_tools import read_image
 from .writer import FileWriter
@@ -15,6 +16,7 @@ __all__ = [
     "FileReader",
     "FileWriter",
     "read_image",
+    "convert_zarr_to_format",
     "OUTPUT_CHOICES",
     "TYPE_MAP",
     "VALID_SUFFIXES",

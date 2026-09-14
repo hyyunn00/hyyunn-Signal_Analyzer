@@ -25,6 +25,10 @@ def _write_synthetic_mask(tmp_path, name="synthetic_mask"):
 
 
 def _make_config(tmp_path, mask_path, output_dir) -> RunConfig:
+    # Deliberately just ONE biomarker, no colocalization section -- this
+    # doubles as proof the pipeline works fine for single-marker runs (the
+    # user flagged this as a requirement); nothing here or in
+    # run_without_registration requires a second biomarker or colocalization.
     return RunConfig(
         brain=BrainConfig(id="PipelineTestB", voxel_size_um=(4.0, 1.82, 1.82), needs_registration=False),
         biomarkers={

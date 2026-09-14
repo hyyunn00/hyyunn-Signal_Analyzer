@@ -57,6 +57,7 @@ def extract_region_to_native(
     resize_order: int = 0,
     chunk_size: tuple[int, int, int] = (128, 128, 128),
     n_workers: int = 8,
+    output_type: str = "single-tiff",
 ) -> Optional[Path]:
     """Extract one region (+ descendants) and resample it to native resolution.
 
@@ -66,15 +67,18 @@ def extract_region_to_native(
         structure_df: The Allen CCF structures table.
         acronym: Target region acronym.
         native_shape: The native mask's (Z,Y,X) shape to resample into.
-        output_path: Directory to write the output Zarr store into.
+        output_path: Directory to write the output into.
         output_name: Base name for the output; defaults to ``f"{acronym}_atlas"``.
         resize_order: skimage interpolation order; 0 (nearest-neighbor) by
             default since this is a region-id/label mask, not intensity data.
+        output_type: Output format, default ``'single-tiff'`` -- a single
+            multi-page ``.tiff`` at native resolution, directly openable in
+            Fiji alongside the original raw image (they share dimensions).
 
     Returns:
-        Path to the native-resolution, relabeled region mask (Zarr), or
-        ``None`` if the region has no voxels in this annotation volume
-        (matches MARS's aba2roi.py, which skips writing a file in that case too).
+        Path to the native-resolution, relabeled region mask, or ``None``
+        if the region has no voxels in this annotation volume (matches
+        MARS's aba2roi.py, which skips writing a file in that case too).
     """
     original_id, all_ids, region_name = get_region_info(structure_df, acronym)
 
@@ -91,6 +95,7 @@ def extract_region_to_native(
     return resize_atlas_array_to_native(
         atlas_mask, native_shape, output_path, output_name,
         resize_order=resize_order, chunk_size=chunk_size, n_workers=n_workers,
+        output_type=output_type,
     )
 
 
@@ -103,6 +108,7 @@ def extract_regions_to_native(
     resize_order: int = 0,
     chunk_size: tuple[int, int, int] = (128, 128, 128),
     n_workers: int = 8,
+    output_type: str = "single-tiff",
 ) -> dict[str, dict]:
     """Extract several regions in one call.
 
@@ -129,6 +135,7 @@ def extract_regions_to_native(
         out_path = extract_region_to_native(
             annotation, structure_df, acronym, native_shape, output_path,
             resize_order=resize_order, chunk_size=chunk_size, n_workers=n_workers,
+            output_type=output_type,
         )
         results[acronym] = {"id": original_id, "name": region_name, "output_path": out_path}
 

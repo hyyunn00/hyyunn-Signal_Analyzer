@@ -42,12 +42,19 @@ runs on.
 
 ## Config file
 
-Start from the two example files in `configs/`:
+Start from the example files in `configs/`:
 
 - `configs/default_biomarkers.yaml` — lab-wide defaults per biomarker
   (detection/filter parameters). A per-brain config is deep-merged on top of
-  this; anything the brain config doesn't override falls back here.
-- `configs/example_brain.yaml` — a full per-brain config, annotated.
+  this; anything the brain config doesn't override falls back here. Merging
+  only fills in fields for biomarkers your brain config already lists —
+  listing one biomarker never pulls in any other biomarker this file happens
+  to define, even if it defines several.
+- `configs/example_brain.yaml` — a full per-brain config (two biomarkers +
+  colocalization), annotated.
+- `configs/example_brain_single_marker.yaml` — the same, but for a single
+  biomarker with no colocalization section. **A single biomarker is fully
+  supported** — nothing in this pipeline requires two.
 
 Minimal example for a **type B** (non-registered) brain:
 
@@ -148,17 +155,25 @@ Under `paths.output_dir` (or `--output-dir`), one subdirectory per biomarker:
 
 ```
 <output_dir>/<biomarker>/
-  cells.parquet                     # detected cells: position, volume, region/hemisphere, pass/fail
-  logs/                             # one .log + .params.json per stage per run
-  <biomarker>_whole_brain_report.csv        # type B only
-  <biomarker>_region_report.xlsx            # type A only (tiered Allen-CCF + asymmetry + Target_Summary)
-  <biomarker>_redraw_native.zarr            # filtered cells drawn back into native-space mask
-  <biomarker>_redraw_atlas.zarr             # type A only: same, in atlas space
-  roi_extract/<acronym>_atlas.zarr          # type A only, if --roi was given
+  cells.parquet                              # detected cells: position, volume, region/hemisphere, pass/fail
+  logs/                                      # one .log + .params.json per stage per run
+  <biomarker>_whole_brain_report.csv         # type B only
+  <biomarker>_region_report.xlsx             # type A only (tiered Allen-CCF + asymmetry + Target_Summary)
+  <biomarker>_redraw_native.scroll-tif/      # filtered cells drawn back into a native-space mask, one
+                                              #   TIFF per Z-slice -- open as an image sequence in Fiji
+                                              #   and overlay directly on the original raw image
+  <biomarker>_redraw_atlas.zarr              # type A only: same, in atlas space (kept as Zarr)
+  roi_extract/<acronym>_atlas.tiff           # type A only, if --roi was given: a single multi-page
+                                              #   TIFF, resampled to the SAME dimensions as the original
+                                              #   raw image, so it opens directly alongside it in Fiji
 ```
 
 `cells.parquet` is the canonical record — every other output is derived from
 it and can be regenerated from it directly (see `signal_analyzer.common.cell_schema.read_cells`).
+
+`redraw_native_mask`/`extract_region_to_native` (called from the Python API,
+not currently exposed as CLI flags) accept an `output_type` argument if you
+ever need Zarr/OME-Zarr/NIfTI instead of the TIFF-based defaults above.
 
 ## Colocalization
 
@@ -191,7 +206,7 @@ pip install -e ".[dev]"
 pytest tests/ -q
 ```
 
-86 tests as of this writing, including regression tests that run MARS's own
+87 tests as of this writing, including regression tests that run MARS's own
 original detection algorithm side-by-side to prove behavioral parity (and
 to prove two real bugs found in it are fixed here — see
 `tests/test_cc3d_detector.py`).

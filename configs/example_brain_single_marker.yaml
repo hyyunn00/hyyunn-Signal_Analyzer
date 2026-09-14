@@ -1,0 +1,37 @@
+# Example per-brain run config for a SINGLE biomarker -- confirms this
+# pipeline works fine with just one marker: no colocalization section is
+# required, and nothing else needs two entries under `biomarkers:`.
+# (Also proven directly by tests/test_run_with_registration.py and
+# tests/test_run_without_registration.py, which both deliberately configure
+# only one biomarker.)
+#
+# Load with: signal_analyzer.common.config.load_config(
+#   "configs/example_brain_single_marker.yaml", defaults_path="configs/default_biomarkers.yaml")
+#
+# This example is a REGISTERED brain (type A). For a brain that does NOT
+# need registration (type B), omit the entire `registration:` section and
+# set `needs_registration: false` -- see configs/example_brain.yaml.
+
+brain:
+  id: "single-marker-brain-01"
+  voxel_size_um: [4.0, 1.82, 1.82]   # native (Z,Y,X), per-brain
+  needs_registration: true
+
+biomarkers:
+  cFos:
+    mask_path: "/path/to/single-marker-brain-01/cFos_mask.tif"
+    filter:
+      min_volume_voxels: 25
+      max_volume_voxels: 10000
+
+registration:
+  annotation_path: "/path/to/single-marker-brain-01/annotation.tif"   # BIRDS output
+  downsample_factor: [2, 5, 5]        # per-axis (Z,Y,X); this lab's typical value (Z=2, X=5, Y=5)
+  transpose_order: [1, 0, 2]          # BIRDS Y/Z-swap convention; must be self-inverse (see common.config)
+
+# No `colocalization:` section -- it's entirely optional and irrelevant
+# with only one biomarker configured.
+
+paths:
+  structures_csv: "data/structures.csv"
+  output_dir: "/path/to/single-marker-brain-01/output"

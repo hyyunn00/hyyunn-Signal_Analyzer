@@ -148,6 +148,39 @@ def test_defaults_are_deep_merged_and_overridable(tmp_path):
     assert cfg.biomarker("cFos").filter.min_volume_voxels == 25
 
 
+def test_defaults_never_add_a_biomarker_the_brain_config_did_not_request(tmp_path):
+    """Regression test: a plain deep-merge would union the two files'
+    biomarker keys, silently pulling in every OTHER biomarker the shared
+    defaults file happens to define -- confirmed with the user that a
+    single-marker brain config must stay single-marker even when merged
+    against a defaults file listing several biomarkers."""
+    defaults_path = _write_yaml(tmp_path / "defaults_multi.yaml", {
+        "biomarkers": {
+            "cFos": {
+                "mask_path": "PLACEHOLDER_CFOS",
+                "filter": {"min_volume_voxels": 25, "max_volume_voxels": 10000},
+            },
+            "TH": {
+                "mask_path": "PLACEHOLDER_TH",
+                "filter": {"min_volume_voxels": 10, "max_volume_voxels": 5000},
+            },
+        },
+    })
+    brain_path = _write_yaml(tmp_path / "single_marker_brain.yaml", {
+        "brain": {"id": "SingleMarker", "voxel_size_um": [4.0, 1.82, 1.82], "needs_registration": False},
+        "biomarkers": {
+            "cFos": {"mask_path": "actual_cfos_mask.tif"},
+        },
+        "paths": {"structures_csv": "data/structures.csv", "output_dir": "out/"},
+    })
+
+    cfg = load_config(brain_path, defaults_path=defaults_path)
+
+    assert list(cfg.biomarkers.keys()) == ["cFos"]  # TH must NOT appear
+    assert cfg.biomarker("cFos").mask_path == "actual_cfos_mask.tif"
+    assert cfg.biomarker("cFos").filter.min_volume_voxels == 25  # still inherited
+
+
 def test_transpose_order_must_be_self_inverse(tmp_path):
     """regions.coord_transform applies transpose_order the same way in both
     the native->atlas-prep direction (align.convert) and the atlas->native
