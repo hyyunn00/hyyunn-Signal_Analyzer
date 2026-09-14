@@ -19,6 +19,8 @@ dependencies = [
     "scikit-image",
     "imageio",
     "numba",
+    "connected-components-3d",
+    "pandas",
     "pyarrow",
     "pyyaml",
     "tqdm",
