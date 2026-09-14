@@ -76,9 +76,13 @@ For a **type A** (registered) brain, add a `registration` section
 registration:
   annotation_path: "/path/to/annotation.tif"   # BIRDS output
   hemisphere_path: "/path/to/hemisphere.tif"    # optional
-  downsample_factor: [5, 5, 2]        # (Z,Y,X), used when preparing BIRDS input
+  downsample_factor: [2, 5, 5]        # (Z,Y,X) -- this lab's typical value (Z=2, X=5, Y=5)
   transpose_order: [1, 0, 2]          # BIRDS Y/Z-swap convention
 ```
+
+Be careful with the axis order: this config's `downsample_factor` is always
+`(Z, Y, X)`. MARS's own `SCALE_X, SCALE_Y, SCALE_Z = 5, 5, 2` reads as
+X=5, Y=5, Z=2 — reordered into `(Z, Y, X)` that's `[2, 5, 5]`, not `[5, 5, 2]`.
 
 `transpose_order` must be self-inverse (identity or a single axis swap) —
 config loading rejects anything else, since the coordinate math only works

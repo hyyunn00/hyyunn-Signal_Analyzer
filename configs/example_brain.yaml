@@ -24,7 +24,10 @@ biomarkers:
 registration:
   annotation_path: "/path/to/example-brain-01/annotation.tif"   # BIRDS output
   hemisphere_path: "/path/to/example-brain-01/hemisphere.tif"    # optional
-  downsample_factor: [5, 5, 2]        # per-axis (Z,Y,X), used only by align.convert's forward pass
+  downsample_factor: [2, 5, 5]        # per-axis (Z,Y,X); this lab's typical value -- confirmed with
+                                       # the user as Z=2, X=5, Y=5 (matches MARS's SCALE_X,SCALE_Y,SCALE_Z=5,5,2
+                                       # reordered into this config's (Z,Y,X) convention). Used only by
+                                       # align.convert's forward pass.
   transpose_order: [1, 0, 2]          # BIRDS Y/Z-swap convention; must be self-inverse (see common.config)
 
 colocalization:
