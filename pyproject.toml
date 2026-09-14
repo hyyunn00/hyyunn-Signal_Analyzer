@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "signal-analyzer"
+version = "0.1.0"
+description = "Unified brain-imaging signal-analysis pipeline (cell detection, region stats, colocalization)"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy",
+    "dask[array]",
+    # Chulab's writer/writer_tools use the zarr v2 API (DirectoryStore, zarr.group);
+    # pin below zarr 3.x, which changed the store API, until that port is done deliberately.
+    "zarr<3",
+    "numcodecs",
+    "tifffile",
+    "nibabel",
+    "scikit-image",
+    "imageio",
+    "numba",
+    "pyarrow",
+    "pyyaml",
+    "tqdm",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]

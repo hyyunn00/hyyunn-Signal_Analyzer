@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+build/
+dist/
+
+# Run outputs (logs, generated Zarr/Parquet/xlsx, temp resize stores)
+logs/
+*.zarr/
+*.parquet
+outputs/
+results/
+chulab_zarr_*/
