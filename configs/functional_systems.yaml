@@ -1,0 +1,32 @@
+# Functional-system presets for report.cell_report.tag_functional_system /
+# build_target_summary. Ported from MARS's asym.py::PRESETS dict
+# (D:\chu_lab\MARS\asym.py), config-driven instead of code-embedded per the
+# architecture plan -- same keyword/acronym groups, no behavior change.
+
+Auditory:
+  keywords: [auditory, cochlear, "inferior colliculus", "medial geniculate", "superior olivary", "lateral lemniscus", trapezoid]
+  acronyms: [AUD, IC, MG, SOC, CN, LL]
+
+Visual:
+  keywords: [visual, retina, "superior colliculus", "lateral geniculate", pretectal]
+  acronyms: [VIS, SC, LGN, PT]
+
+Somatosensory:
+  keywords: [somatosensory, barrel, trigeminal, "ventral posterolateral"]
+  acronyms: [SS, VPL, VPM]
+
+Motor_BasalGanglia:
+  keywords: [motor, striatum, "substantia nigra", caudate, putamen, "globus pallidus"]
+  acronyms: [MO, STR, SN, CP, GP]
+
+Limbic_Memory:
+  keywords: [hippocampus, amygdala, cingulate, entorhinal, retrospenial]
+  acronyms: [HIP, AMY, ENT, ACA, RSP]
+
+Olfactory:
+  keywords: [olfactory, piriform, "anterior olfactory nucleus"]
+  acronyms: [OB, MOB, PIR, AON]
+
+Homeostasis:
+  keywords: [hypothalamus, preoptic, paraventricular, suprachiasmatic]
+  acronyms: [HY, PO, PVH, SCN]

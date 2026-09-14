@@ -21,6 +21,7 @@ dependencies = [
     "numba",
     "connected-components-3d",
     "pandas",
+    "openpyxl",
     "pyarrow",
     "pyyaml",
     "tqdm",
