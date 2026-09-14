@@ -1,0 +1,36 @@
+# Example per-brain run config for a REGISTERED brain ("brain type A").
+# Load with: signal_analyzer.common.config.load_config(
+#   "configs/example_brain.yaml", defaults_path="configs/default_biomarkers.yaml")
+#
+# For a brain that does NOT need registration ("brain type B"), omit the
+# entire `registration:` section and set `needs_registration: false` --
+# these brains have no annotation.tif at all (see the architecture plan's
+# confirmed facts), so region/hemisphere stats are never produced for them.
+
+brain:
+  id: "example-brain-01"
+  voxel_size_um: [4.0, 1.82, 1.82]   # native (Z,Y,X), per-brain
+  needs_registration: true
+
+biomarkers:
+  cFos:
+    mask_path: "/path/to/example-brain-01/cFos_mask.tif"
+    # detection/filter omitted here -> inherited from default_biomarkers.yaml
+  TH:
+    mask_path: "/path/to/example-brain-01/TH_mask.tif"
+    filter:
+      min_volume_voxels: 15   # override just this one field; connectivity/z_chunk/max still inherited
+
+registration:
+  annotation_path: "/path/to/example-brain-01/annotation.tif"   # BIRDS output
+  hemisphere_path: "/path/to/example-brain-01/hemisphere.tif"    # optional
+  downsample_factor: [5, 5, 2]        # per-axis (Z,Y,X), used only by align.convert's forward pass
+  transpose_order: [1, 0, 2]          # BIRDS Y/Z-swap convention; must be self-inverse (see common.config)
+
+colocalization:
+  pairs:
+    - {larger: "TH", smaller: "cFos"}
+
+paths:
+  structures_csv: "data/structures.csv"
+  output_dir: "/path/to/example-brain-01/output"

@@ -1,0 +1,27 @@
+# Lab-wide default biomarker parameters. A per-brain config (e.g.
+# example_brain.yaml) is deep-merged on top of this file (see
+# common.config.load_config's `defaults_path` argument) -- values in the
+# per-brain config always win; anything it omits falls back to here.
+#
+# These are placeholder values illustrating the shape of the config, not
+# validated lab thresholds -- replace mask_path per brain, and tune
+# filter bounds per biomarker once real detection results are available.
+
+biomarkers:
+  cFos:
+    mask_path: "PLACEHOLDER -- set per brain"
+    detection:
+      connectivity: 18
+      z_chunk: 100
+    filter:
+      min_volume_voxels: 25
+      max_volume_voxels: 10000
+
+  TH:
+    mask_path: "PLACEHOLDER -- set per brain"
+    detection:
+      connectivity: 18
+      z_chunk: 100
+    filter:
+      min_volume_voxels: 10
+      max_volume_voxels: 10000

@@ -32,5 +32,8 @@ dev = [
     "pytest",
 ]
 
+[project.scripts]
+signal-analyzer = "signal_analyzer.pipelines.run:main"
+
 [tool.setuptools.packages.find]
 where = ["src"]
