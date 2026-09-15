@@ -25,6 +25,34 @@ from .writer_tools import (
 logger = logging.getLogger(__name__)
 
 
+def expected_output_path(output_path, output_name, output_type) -> Path:
+    """The final path ``FileWriter(output_path, output_name, output_type, ...)``
+    will produce for a full-volume (single, non-partial) write, without
+    instantiating ``FileWriter`` -- instantiating would be destructive for a
+    ``'zarr'``/``'ome-zarr'`` target (its initializer opens the store with
+    ``mode='w'``, truncating any existing data). Used by skip-if-exists
+    checks (``redraw``, ``roi_extract``) that need to know a stage's output
+    path *before* deciding whether to run it at all.
+
+    Mirrors ``FileWriter``'s own per-``output_type`` naming
+    (``_initialize_zarr``, ``_initialize_scroll_tiff``, etc.) and, for
+    ``'single-tiff'``/``'single-nii'``, ``_single_output_name``'s
+    full-volume-write case (no ``z<start>-<end>`` suffix).
+    """
+    output_path = Path(output_path)
+    suffix = {
+        "zarr": ".zarr",
+        "ome-zarr": ".ome.zarr",
+        "single-tiff": ".tiff",
+        "scroll-tiff": ".scroll-tif",
+        "single-nii": ".nii.gz",
+        "scroll-nii": ".scroll-nii",
+    }.get(output_type)
+    if suffix is None:
+        raise ValueError(f"Unknown output_type: {output_type}")
+    return output_path / f"{output_name}{suffix}"
+
+
 class FileWriter:
     """Handle writing datasets to the supported output formats.
 

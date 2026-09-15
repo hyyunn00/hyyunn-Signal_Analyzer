@@ -9,12 +9,13 @@ opening.
 from .convert import convert_zarr_to_format
 from .reader import FileReader
 from .reader_tools import read_image
-from .writer import FileWriter
+from .writer import FileWriter, expected_output_path
 from .types import OUTPUT_CHOICES, TYPE_MAP, VALID_SUFFIXES, VolumeMetadata
 
 __all__ = [
     "FileReader",
     "FileWriter",
+    "expected_output_path",
     "read_image",
     "convert_zarr_to_format",
     "OUTPUT_CHOICES",

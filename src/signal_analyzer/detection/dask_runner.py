@@ -82,29 +82,28 @@ def detect_biomarker(
 
     voxel_volume_um3 = brain.voxel_size_um[0] * brain.voxel_size_um[1] * brain.voxel_size_um[2]
 
-    writer = CellTableWriter(output_path)
     n_written = 0
-    batch: list[dict] = []
-    for cell_id, (label, coords) in enumerate(cells.items(), start=1):
-        z, y, x, vol = coords
-        batch.append({
-            "cell_id": cell_id,
-            "z": int(z),
-            "y": int(y),
-            "x": int(x),
-            "volume_voxels": int(vol),
-            "volume_um3": float(vol) * voxel_volume_um3,
-            "biomarker": biomarker.name,
-            "region_id": None,
-            "hemisphere_id": HEMISPHERE_NA,
-            "brain_id": brain.id,
-            "run_id": run_id,
-            "passed_filter": False,
-        })
-        if len(batch) >= _WRITE_BATCH_SIZE:
-            n_written += writer.write_batch(batch)
-            batch = []
-    n_written += writer.write_batch(batch)
-    writer.close()
+    with CellTableWriter(output_path) as writer:
+        batch: list[dict] = []
+        for cell_id, (label, coords) in enumerate(cells.items(), start=1):
+            z, y, x, vol = coords
+            batch.append({
+                "cell_id": cell_id,
+                "z": int(z),
+                "y": int(y),
+                "x": int(x),
+                "volume_voxels": int(vol),
+                "volume_um3": float(vol) * voxel_volume_um3,
+                "biomarker": biomarker.name,
+                "region_id": None,
+                "hemisphere_id": HEMISPHERE_NA,
+                "brain_id": brain.id,
+                "run_id": run_id,
+                "passed_filter": False,
+            })
+            if len(batch) >= _WRITE_BATCH_SIZE:
+                n_written += writer.write_batch(batch)
+                batch = []
+        n_written += writer.write_batch(batch)
 
     return n_written

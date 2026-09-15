@@ -24,6 +24,8 @@ memory-bounded for full-size brain volumes.
 from __future__ import annotations
 
 import logging
+import shutil
+import uuid
 from pathlib import Path
 from typing import Optional
 
@@ -31,10 +33,18 @@ import numpy as np
 import pandas as pd
 
 from ..common.cell_schema import read_cells
-from ..io import FileWriter
+from ..io import FileWriter, expected_output_path
 from ..regions.coord_transform import native_to_atlas_points
 
 logger = logging.getLogger(__name__)
+
+# output_types for which FileWriter nests its result under a single
+# `{output_name}<suffix>` file/directory -- the renameable unit an atomic
+# temp-name-then-rename can target. 'single-tiff'/'single-nii' instead write
+# directly into the given output_path with no such nesting (and, written in
+# Z-slabs here, would produce multiple z-range-suffixed files rather than one
+# renameable output), so atomicity is not applied for those.
+_ATOMIC_OUTPUT_TYPES = ("zarr", "ome-zarr", "scroll-tiff", "scroll-nii")
 
 
 def _scatter_points_chunked(
@@ -58,14 +68,22 @@ def _scatter_points_chunked(
     per-slice structure at ``shape``'s dimensions); the write loop is
     otherwise unchanged since ``FileWriter``'s scroll-tiff handler already
     writes one file per Z-index within each chunk.
+
+    For ``output_type`` in ``_ATOMIC_OUTPUT_TYPES``, the write happens under
+    a temp name and is atomically renamed onto the real output name only on
+    success, so a crash/interruption mid-scatter never leaves a partial
+    result at the path a later run's skip-if-exists check would trust.
     """
+    atomic = output_type in _ATOMIC_OUTPUT_TYPES
+    write_name = f".tmp-{uuid.uuid4().hex[:8]}-{output_name}" if atomic else output_name
+
     file_name = None
     if output_type == "scroll-tiff":
         file_name = [Path(f"slice_{i:05d}") for i in range(shape[0])]
 
     writer = FileWriter(
         output_path=output_path,
-        output_name=output_name,
+        output_name=write_name,
         output_type=output_type,
         full_res_shape=shape,
         output_dtype=dtype,
@@ -76,19 +94,48 @@ def _scatter_points_chunked(
     total_z = shape[0]
     z_step = chunk_size[0]
 
-    for z0 in range(0, total_z, z_step):
-        z1 = min(z0 + z_step, total_z)
-        slab = np.zeros((z1 - z0, shape[1], shape[2]), dtype=dtype)
+    try:
+        for z0 in range(0, total_z, z_step):
+            z1 = min(z0 + z_step, total_z)
+            slab = np.zeros((z1 - z0, shape[1], shape[2]), dtype=dtype)
 
-        if not points.empty:
-            chunk_points = points[(points["z"] >= z0) & (points["z"] < z1)]
-            if not chunk_points.empty:
-                local_z = chunk_points["z"].to_numpy() - z0
-                slab[local_z, chunk_points["y"].to_numpy(), chunk_points["x"].to_numpy()] = fill_value
+            if not points.empty:
+                chunk_points = points[(points["z"] >= z0) & (points["z"] < z1)]
+                if not chunk_points.empty:
+                    local_z = chunk_points["z"].to_numpy() - z0
+                    slab[local_z, chunk_points["y"].to_numpy(), chunk_points["x"].to_numpy()] = fill_value
 
-        writer.write(slab, z_start=z0, z_end=z1)
+            writer.write(slab, z_start=z0, z_end=z1)
+    except BaseException:
+        if atomic:
+            shutil.rmtree(writer.output_path, ignore_errors=True)
+        raise
 
-    return writer.output_path
+    if not atomic:
+        return writer.output_path
+
+    final_path = expected_output_path(output_path, output_name, output_type)
+    _replace_output(writer.output_path, final_path)
+    return final_path
+
+
+def _replace_output(tmp_path: Path, final_path: Path) -> None:
+    """Atomically-as-possible move ``tmp_path`` onto ``final_path``.
+
+    ``Path.replace``/``os.replace`` can only target a directory destination
+    that does not already exist (a Windows filesystem limitation) -- so when
+    a prior run's output is still there (the caller has already decided to
+    recompute, e.g. a staleness check), it's removed first. This narrows,
+    but can't fully close, the atomicity window for a directory-shaped
+    output; a single-file output (unaffected by this limitation) still
+    renames directly.
+    """
+    if final_path.exists():
+        if final_path.is_dir():
+            shutil.rmtree(final_path)
+        else:
+            final_path.unlink()
+    tmp_path.replace(final_path)
 
 
 def _drop_out_of_bounds(df: pd.DataFrame, shape: tuple[int, int, int], context: str) -> pd.DataFrame:

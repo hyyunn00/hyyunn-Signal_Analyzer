@@ -28,6 +28,8 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 
+from ..common.atomic_io import atomic_write_table
+from ..common.backup import backup_cells_file
 from ..common.cell_schema import CELL_SCHEMA, read_cells
 from ..io import FileReader
 from ..regions.structures import rollup_tiers
@@ -68,15 +70,19 @@ def colocalize_pair(
     smaller_biomarker: str,
     larger_mask_path: str | Path,
     larger_biomarker: str,
+    *,
+    backup: bool = True,
+    keep_backups: int = 3,
 ) -> dict:
     """Test the smaller biomarker's filtered cells for colocalization with
     the larger biomarker's original, unfiltered mask.
 
-    Rewrites ``smaller_cells_path`` in place, adding (or updating) a
-    ``colocalized_with_<larger_biomarker>`` boolean column -- False for
-    rows that weren't tested (a different biomarker, or ``passed_filter``
-    is False; colocalization is only meaningful for cells that survived
-    volume filtering).
+    Rewrites ``smaller_cells_path`` in place (atomically), adding (or
+    updating) a ``colocalized_with_<larger_biomarker>`` boolean column --
+    False for rows that weren't tested (a different biomarker, or
+    ``passed_filter`` is False; colocalization is only meaningful for cells
+    that survived volume filtering). A pre-rewrite backup snapshot is kept
+    by default (see ``common.backup``).
 
     Args:
         smaller_cells_path: Path to the cell Parquet table containing the
@@ -87,11 +93,15 @@ def colocalize_pair(
             actual mask volume).
         larger_biomarker: Name of the larger biomarker (used for the output
             column name and the summary).
+        backup: Whether to snapshot the file before rewriting it.
+        keep_backups: Number of most-recent "colocalization" backups to retain.
 
     Returns:
         {"tested": n, "colocalized": n} for this biomarker's passed-filter cells.
     """
     smaller_cells_path = Path(smaller_cells_path)
+    if backup:
+        backup_cells_file(smaller_cells_path, stage="colocalization", keep=keep_backups)
     mask = FileReader(larger_mask_path).read()
 
     table = pq.read_table(smaller_cells_path)
@@ -111,7 +121,7 @@ def colocalize_pair(
 
     extended_schema = CELL_SCHEMA.append(pa.field(column_name, pa.bool_()))
     new_table = pa.Table.from_pandas(df, schema=extended_schema, preserve_index=False)
-    pq.write_table(new_table, smaller_cells_path)
+    atomic_write_table(new_table, smaller_cells_path)
 
     return {"tested": n_tested, "colocalized": n_colocalized}
 

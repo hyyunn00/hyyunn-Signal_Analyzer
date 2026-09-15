@@ -1,10 +1,13 @@
 """Phase 0 verification: the Parquet cell schema round-trips incremental
 per-chunk writes and supports the filtered reads later stages depend on
 (colocalization joins, per-biomarker report aggregation)."""
+import pytest
+
 from signal_analyzer.common.cell_schema import (
     HEMISPHERE_LEFT,
     HEMISPHERE_NA,
     CellTableWriter,
+    is_complete_cells_file,
     read_cells,
 )
 
@@ -97,3 +100,38 @@ def test_empty_batch_is_a_noop(tmp_path):
     n = writer.write_batch([])
     assert n == 0
     assert writer.close() == 0
+
+
+def test_write_batch_exception_mid_loop_leaves_no_final_file(tmp_path):
+    """A crash mid-write must never leave a truncated file at the real
+    ``output_path`` -- writes go to a temp sibling, renamed onto the final
+    path only on a clean ``close()``/``__exit__``. Otherwise a later run's
+    skip-if-exists check (bare ``.exists()``) would mistake a truncated file
+    for a completed detection result."""
+    out_path = tmp_path / "cells.parquet"
+
+    with pytest.raises(ValueError):
+        with CellTableWriter(out_path) as writer:
+            writer.write_batch([_record(1, 0, 0, 0)])
+            bad_record = _record(2, 0, 1, 1)
+            del bad_record["volume_voxels"]
+            writer.write_batch([bad_record])
+
+    assert not out_path.exists()
+    assert list(tmp_path.glob(".tmp-*")) == []
+
+
+def test_is_complete_cells_file(tmp_path):
+    out_path = tmp_path / "cells.parquet"
+
+    assert is_complete_cells_file(out_path) is False  # doesn't exist yet
+
+    with CellTableWriter(out_path) as writer:
+        writer.write_batch([_record(1, 0, 0, 0)])
+    assert is_complete_cells_file(out_path) is True
+
+    # Simulate a pre-existing truncated file (e.g. from before this repo's
+    # write-then-rename fix, or any other truncation source).
+    truncated_path = tmp_path / "truncated.parquet"
+    truncated_path.write_bytes(out_path.read_bytes()[:20])
+    assert is_complete_cells_file(truncated_path) is False

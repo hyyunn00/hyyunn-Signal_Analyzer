@@ -11,12 +11,16 @@ volume-filter threshold silently diverged between files.
 """
 from __future__ import annotations
 
+import logging
+import uuid
 from pathlib import Path
 from typing import Iterable, Optional
 
 import pyarrow as pa
 import pyarrow.dataset as ds
 import pyarrow.parquet as pq
+
+logger = logging.getLogger(__name__)
 
 # Hemisphere id convention shared across the whole pipeline.
 HEMISPHERE_NA = 0
@@ -61,11 +65,18 @@ class CellTableWriter:
         self.output_path = Path(output_path)
         self.output_path.parent.mkdir(parents=True, exist_ok=True)
         self.schema = schema
+        self._tmp_path = self.output_path.with_name(f".tmp-{uuid.uuid4().hex[:8]}-{self.output_path.name}")
         self._writer: Optional[pq.ParquetWriter] = None
         self._n_written = 0
 
     def write_batch(self, records: Iterable[dict]) -> int:
         """Append a batch of cell-record dicts. Returns the number of rows written.
+
+        Writes go to a temp sibling of ``output_path``, not ``output_path``
+        itself -- ``close()`` only renames the temp file into place once
+        every batch has been written successfully, so a crash mid-loop can
+        never leave a truncated file at the real ``output_path`` for a later
+        run's skip-if-exists check to mistake for a completed result.
 
         Each dict must contain every field in ``self.schema`` (missing
         optional fields like ``region_id`` should be passed explicitly as
@@ -82,23 +93,56 @@ class CellTableWriter:
 
         table = pa.Table.from_pylist(records, schema=self.schema)
         if self._writer is None:
-            self._writer = pq.ParquetWriter(self.output_path, self.schema)
+            self._writer = pq.ParquetWriter(self._tmp_path, self.schema)
         self._writer.write_table(table)
         self._n_written += table.num_rows
         return table.num_rows
 
     def close(self) -> int:
-        """Finalize the Parquet file. Returns the total number of rows written."""
+        """Finalize: close the temp Parquet writer and atomically rename it
+        onto ``output_path``. Returns the total number of rows written.
+
+        If no rows were ever written (writer never opened, e.g. an empty
+        detection result), no file is created at ``output_path`` at all.
+        """
         if self._writer is not None:
             self._writer.close()
             self._writer = None
+            self._tmp_path.replace(self.output_path)
         return self._n_written
 
     def __enter__(self) -> "CellTableWriter":
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
-        self.close()
+        if exc_type is not None:
+            if self._writer is not None:
+                self._writer.close()
+                self._writer = None
+            self._tmp_path.unlink(missing_ok=True)
+        else:
+            self.close()
+
+
+def is_complete_cells_file(path: str | Path) -> bool:
+    """Whether ``path`` is a structurally valid, fully-written cell Parquet file.
+
+    Used by every skip-if-exists check that would otherwise trust bare file
+    existence -- a file left at the final path by a crash predating this
+    module's write-then-rename ``CellTableWriter``, or corrupted by any other
+    means, has no valid Parquet footer; reading just the footer/metadata
+    (never row data) is enough to detect this, cheaply even for a
+    multi-million-row file.
+    """
+    path = Path(path)
+    if not path.exists():
+        return False
+    try:
+        pq.ParquetFile(path).metadata
+        return True
+    except Exception:
+        logger.warning("Cells file %s failed Parquet validity check; treating as incomplete.", path)
+        return False
 
 
 def read_cells(

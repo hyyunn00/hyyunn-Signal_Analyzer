@@ -107,6 +107,47 @@ def test_run_with_registration_full_pipeline(tmp_path):
     assert "Tier 2" in sheets
 
 
+def test_run_with_registration_redetects_after_truncated_cells_file(tmp_path):
+    """A crash-truncated cells.parquet must not be mistaken for a completed
+    detection result (same fix/behavior as run_without_registration)."""
+    mask_path, annotation_path = _write_synthetic_data(tmp_path)
+    structures_csv = _write_structures_csv(tmp_path)
+    output_dir = tmp_path / "out"
+    config = _make_config(mask_path, annotation_path, structures_csv, output_dir)
+
+    run_with_registration(config, output_dir=output_dir)
+    log_dir = output_dir / "cFos" / "logs"
+    assert len(list(log_dir.glob("detect_*.log"))) == 1
+
+    cells_path = output_dir / "cFos" / "cells.parquet"
+    cells_path.write_bytes(cells_path.read_bytes()[:20])
+
+    run_with_registration(config, output_dir=output_dir)
+    assert len(list(log_dir.glob("detect_*.log"))) == 2
+    assert cells_path.exists()
+
+
+def test_run_with_registration_roi_extract_skips_on_second_call(tmp_path):
+    """roi_extract is a genuinely expensive full-volume resample, same cost
+    class as detect -- it should skip re-extracting a region whose output
+    file already exists, unlike before this repo added skip-if-exists there."""
+    mask_path, annotation_path = _write_synthetic_data(tmp_path)
+    structures_csv = _write_structures_csv(tmp_path)
+    output_dir = tmp_path / "out"
+    config = _make_config(mask_path, annotation_path, structures_csv, output_dir)
+
+    run_with_registration(config, output_dir=output_dir, roi_acronyms=["A"])
+    log_dir = output_dir / "cFos" / "logs"
+    assert len(list(log_dir.glob("roi_extract_*.log"))) == 1
+    roi_path = output_dir / "cFos" / "roi_extract" / "A_atlas.tiff"
+    assert roi_path.exists()
+    mtime_after_first = roi_path.stat().st_mtime_ns
+
+    run_with_registration(config, output_dir=output_dir, roi_acronyms=["A"])
+    assert len(list(log_dir.glob("roi_extract_*.log"))) == 2  # stage itself still runs/logs...
+    assert roi_path.stat().st_mtime_ns == mtime_after_first  # ...but didn't rewrite the file
+
+
 def test_run_with_registration_rejects_non_registered_config(tmp_path):
     mask_path, annotation_path = _write_synthetic_data(tmp_path)
     structures_csv = _write_structures_csv(tmp_path)

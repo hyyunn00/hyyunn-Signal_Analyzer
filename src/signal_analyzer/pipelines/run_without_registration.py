@@ -18,11 +18,13 @@ import logging
 from pathlib import Path
 from typing import Optional
 
+from ..common.cell_schema import is_complete_cells_file
 from ..common.config import RunConfig
+from ..common.manifest import fingerprint_matches, read_manifest
 from ..common.run_logger import RunLogger
 from ..detection.dask_runner import detect_biomarker
 from ..filtering.volume_filter import apply_volume_filter
-from ..io import FileReader
+from ..io import FileReader, expected_output_path
 from ..redraw.mask_from_cells import redraw_native_mask
 from ..report.cell_report import write_whole_brain_report
 
@@ -56,7 +58,7 @@ def run_without_registration(config: RunConfig, output_dir: Optional[str | Path]
         cells_path = biomarker_dir / "cells.parquet"
         native_shape = FileReader(biomarker.mask_path).volume_shape
 
-        if cells_path.exists():
+        if cells_path.exists() and is_complete_cells_file(cells_path):
             logger.info("Skipping detect for biomarker=%s: %s already exists", name, cells_path)
         else:
             with RunLogger("detect", biomarker_dir, config={"biomarker": name, "brain_id": config.brain.id}) as run:
@@ -75,11 +77,21 @@ def run_without_registration(config: RunConfig, output_dir: Optional[str | Path]
             run.record_result("report_path", str(report_path))
             run.record_result("total_cells", total_cells)
 
-        with RunLogger("redraw", biomarker_dir, config={"biomarker": name}) as run:
-            redraw_path = redraw_native_mask(
-                cells_path, native_shape, biomarker_dir, f"{name}_redraw_native", biomarker=name,
+        redraw_output_name = f"{name}_redraw_native"
+        expected_redraw = expected_output_path(biomarker_dir, redraw_output_name, "scroll-tiff")
+        recorded_fp = read_manifest(biomarker_dir).get("stages", {}).get("redraw", {}).get("fingerprints", {}).get("cells_parquet")
+        if expected_redraw.exists() and fingerprint_matches(recorded_fp, cells_path):
+            logger.info(
+                "Skipping redraw for biomarker=%s: %s exists and cells.parquet unchanged", name, expected_redraw,
             )
-            run.record_result("redraw_path", str(redraw_path))
+            redraw_path = expected_redraw
+        else:
+            with RunLogger("redraw", biomarker_dir, config={"biomarker": name}) as run:
+                run.record_input_fingerprint("cells_parquet", cells_path)
+                redraw_path = redraw_native_mask(
+                    cells_path, native_shape, biomarker_dir, redraw_output_name, biomarker=name,
+                )
+                run.record_result("redraw_path", str(redraw_path))
 
         results[name] = {
             "cells_path": cells_path,

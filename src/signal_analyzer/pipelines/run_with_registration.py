@@ -27,11 +27,13 @@ import logging
 from pathlib import Path
 from typing import Optional
 
+from ..common.cell_schema import is_complete_cells_file
 from ..common.config import RunConfig
+from ..common.manifest import fingerprint_matches, read_manifest
 from ..common.run_logger import RunLogger
 from ..detection.dask_runner import detect_biomarker
 from ..filtering.volume_filter import apply_volume_filter
-from ..io import FileReader
+from ..io import FileReader, expected_output_path
 from ..redraw.mask_from_cells import redraw_atlas_mask, redraw_native_mask
 from ..regions.coord_transform import assign_regions_in_cell_table
 from ..regions.structures import load_structures
@@ -94,7 +96,7 @@ def run_with_registration(
         cells_path = biomarker_dir / "cells.parquet"
         native_shape = FileReader(biomarker.mask_path).volume_shape
 
-        if cells_path.exists():
+        if cells_path.exists() and is_complete_cells_file(cells_path):
             logger.info("Skipping detect for biomarker=%s: %s already exists", name, cells_path)
         else:
             with RunLogger("detect", biomarker_dir, config={"biomarker": name, "brain_id": config.brain.id}) as run:
@@ -137,15 +139,32 @@ def run_with_registration(
                     {k: str(v["output_path"]) if v["output_path"] else None for k, v in roi_results.items()},
                 )
 
-        with RunLogger("redraw", biomarker_dir, config={"biomarker": name}) as run:
-            atlas_redraw_path = redraw_atlas_mask(
-                cells_path, native_shape, annotation.shape, biomarker_dir, f"{name}_redraw_atlas", biomarker=name,
+        atlas_redraw_name = f"{name}_redraw_atlas"
+        native_redraw_name = f"{name}_redraw_native"
+        expected_atlas_redraw = expected_output_path(biomarker_dir, atlas_redraw_name, "zarr")
+        expected_native_redraw = expected_output_path(biomarker_dir, native_redraw_name, "scroll-tiff")
+        recorded_fp = read_manifest(biomarker_dir).get("stages", {}).get("redraw", {}).get("fingerprints", {}).get("cells_parquet")
+        if (
+            expected_atlas_redraw.exists()
+            and expected_native_redraw.exists()
+            and fingerprint_matches(recorded_fp, cells_path)
+        ):
+            logger.info(
+                "Skipping redraw for biomarker=%s: outputs exist and cells.parquet unchanged", name,
             )
-            native_redraw_path = redraw_native_mask(
-                cells_path, native_shape, biomarker_dir, f"{name}_redraw_native", biomarker=name,
-            )
-            run.record_result("atlas_redraw_path", str(atlas_redraw_path))
-            run.record_result("native_redraw_path", str(native_redraw_path))
+            atlas_redraw_path = expected_atlas_redraw
+            native_redraw_path = expected_native_redraw
+        else:
+            with RunLogger("redraw", biomarker_dir, config={"biomarker": name}) as run:
+                run.record_input_fingerprint("cells_parquet", cells_path)
+                atlas_redraw_path = redraw_atlas_mask(
+                    cells_path, native_shape, annotation.shape, biomarker_dir, atlas_redraw_name, biomarker=name,
+                )
+                native_redraw_path = redraw_native_mask(
+                    cells_path, native_shape, biomarker_dir, native_redraw_name, biomarker=name,
+                )
+                run.record_result("atlas_redraw_path", str(atlas_redraw_path))
+                run.record_result("native_redraw_path", str(native_redraw_path))
 
         results[name] = {
             "cells_path": cells_path,

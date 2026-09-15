@@ -44,6 +44,8 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 
+from ..common.atomic_io import atomic_write_table
+from ..common.backup import backup_cells_file
 from ..common.cell_schema import CELL_SCHEMA
 from ..io import FileReader, FileWriter
 from ..io.convert import convert_zarr_to_format
@@ -147,14 +149,18 @@ def assign_regions_in_cell_table(
     annotation: np.ndarray,
     hemisphere: Optional[np.ndarray] = None,
     biomarker: Optional[str] = None,
+    *,
+    backup: bool = True,
+    keep_backups: int = 3,
 ) -> dict:
     """Populate ``region_id``/``hemisphere_id`` for cells in a Parquet table.
 
     Realizes this phase's deliverable end-to-end: cell coordinates produced
     by ``detection.dask_runner.detect_biomarker`` (Phase 1, native space,
     ``region_id`` left null) can now be resolved against a real annotation
-    volume. Rewrites the Parquet file in place, same pattern as
-    ``filtering.volume_filter.apply_volume_filter``.
+    volume. Rewrites the Parquet file in place (atomically), same pattern as
+    ``filtering.volume_filter.apply_volume_filter``, including a pre-rewrite
+    backup snapshot (see ``common.backup``).
 
     Args:
         cells_path: Path to the cell Parquet table.
@@ -163,11 +169,15 @@ def assign_regions_in_cell_table(
         annotation: Annotation volume in logical (Z,Y,X)-matching axis order.
         hemisphere: Optional hemisphere-label volume, same shape/order.
         biomarker: If given, only this biomarker's rows are (re)assigned.
+        backup: Whether to snapshot the file before rewriting it.
+        keep_backups: Number of most-recent "assign_regions" backups to retain.
 
     Returns:
         {"assigned": <number of rows updated>}
     """
     cells_path = Path(cells_path)
+    if backup:
+        backup_cells_file(cells_path, stage="assign_regions", keep=keep_backups)
     table = pq.read_table(cells_path)
     df = table.to_pandas()
 
@@ -187,7 +197,7 @@ def assign_regions_in_cell_table(
     df["hemisphere_id"] = df["hemisphere_id"].astype("int8")
 
     new_table = pa.Table.from_pandas(df, schema=CELL_SCHEMA, preserve_index=False)
-    pq.write_table(new_table, cells_path)
+    atomic_write_table(new_table, cells_path)
 
     return {"assigned": n_assigned}
 

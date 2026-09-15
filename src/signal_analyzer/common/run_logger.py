@@ -16,6 +16,8 @@ import uuid
 from pathlib import Path
 from typing import Any, Optional
 
+from . import manifest as _manifest
+
 
 def _json_default(obj: Any) -> Any:
     """Best-effort JSON coercion for common non-serializable types."""
@@ -70,6 +72,7 @@ class RunLogger:
 
         self._inputs: dict[str, Any] = {}
         self._results: dict[str, Any] = {}
+        self._fingerprints: dict[str, Any] = {}
         self._file_handler: Optional[logging.Handler] = None
         self._start_time: Optional[float] = None
         self._status = "not_started"
@@ -82,6 +85,14 @@ class RunLogger:
     def record_result(self, key: str, value: Any) -> None:
         """Record a result value (e.g. cell counts, output paths) in the params sidecar."""
         self._results[key] = value
+
+    def record_input_fingerprint(self, key: str, path: str | Path) -> None:
+        """Record a cheap (mtime, size) fingerprint of an input file, for later
+        staleness checks (see ``common.manifest.fingerprint_matches``) --
+        e.g. so a downstream stage can tell whether ``cells.parquet`` has
+        changed since this stage last ran successfully.
+        """
+        self._fingerprints[key] = _manifest.stage_fingerprint(path)
 
     def __enter__(self) -> "RunLogger":
         self.logs_dir.mkdir(parents=True, exist_ok=True)
@@ -129,10 +140,16 @@ class RunLogger:
             "config": self.config,
             "inputs": self._inputs,
             "results": self._results,
+            "fingerprints": self._fingerprints,
             "log_path": str(self.log_path),
         }
         with open(self.params_path, "w", encoding="utf-8") as f:
             json.dump(record, f, indent=2, default=_json_default)
+
+        try:
+            _manifest.update(self.output_dir, self.stage_name, record, success=(self._status == "completed"))
+        except OSError as e:
+            logging.getLogger(__name__).warning("Failed to update manifest for stage=%s: %s", self.stage_name, e)
 
         if self._file_handler is not None:
             logging.getLogger().removeHandler(self._file_handler)

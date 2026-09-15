@@ -86,6 +86,57 @@ def test_run_without_registration_skips_detect_on_second_call(tmp_path):
     assert n_filter_logs == 2
 
 
+def test_run_without_registration_redetects_after_truncated_cells_file(tmp_path):
+    """A crash-truncated cells.parquet left at the final path must NOT be
+    mistaken for a completed detection result -- skip-if-exists checks
+    structural validity (is_complete_cells_file), not bare existence."""
+    mask_path = _write_synthetic_mask(tmp_path)
+    output_dir = tmp_path / "out"
+    config = _make_config(tmp_path, mask_path, output_dir)
+
+    run_without_registration(config, output_dir=output_dir)
+    log_dir = output_dir / "cFos" / "logs"
+    assert len(list(log_dir.glob("detect_*.log"))) == 1
+
+    cells_path = output_dir / "cFos" / "cells.parquet"
+    cells_path.write_bytes(cells_path.read_bytes()[:20])  # simulate a crash-truncated write
+
+    run_without_registration(config, output_dir=output_dir)
+    assert len(list(log_dir.glob("detect_*.log"))) == 2  # re-detected, not silently skipped
+    assert cells_path.exists()
+
+
+def test_run_without_registration_second_call_with_different_threshold_updates_redraw(tmp_path):
+    """Re-running with a changed volume-filter threshold must still produce
+    a correct, non-crashing redraw on the second call -- a regression test
+    for the atomic-rename fix needed when a prior run's redraw output (a
+    scroll-tiff directory) already exists at the final path."""
+    mask_path = _write_synthetic_mask(tmp_path)
+    output_dir = tmp_path / "out"
+    config = _make_config(tmp_path, mask_path, output_dir)
+
+    first = run_without_registration(config, output_dir=output_dir)
+    first_redrawn = FileReader(first["cFos"]["redraw_path"]).read()
+    assert (first_redrawn > 0).sum() == 1  # only the 64-voxel blob passes [30, 100]
+
+    # Widen the filter so both synthetic blobs (8 and 64 voxels) now pass
+    # (configs are frozen dataclasses, so build a fresh one rather than mutate).
+    widened_config = RunConfig(
+        brain=config.brain,
+        biomarkers={
+            "cFos": BiomarkerConfig(
+                name="cFos", mask_path=str(mask_path),
+                detection=config.biomarkers["cFos"].detection,
+                filter=FilterConfig(min_volume_voxels=1, max_volume_voxels=100),
+            ),
+        },
+        paths=config.paths,
+    )
+    second = run_without_registration(widened_config, output_dir=output_dir)
+    second_redrawn = FileReader(second["cFos"]["redraw_path"]).read()
+    assert (second_redrawn > 0).sum() == 2
+
+
 def test_run_without_registration_rejects_registered_brain_config(tmp_path):
     mask_path = _write_synthetic_mask(tmp_path)
     output_dir = tmp_path / "out"
